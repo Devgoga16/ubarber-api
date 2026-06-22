@@ -18,6 +18,7 @@ const createBarberSchema = z.object({
   name: z.string().min(2),
   email: z.string().email(),
   password: z.string().min(6),
+  phone: z.string().optional(),
   locationIds: z.array(z.string()).min(1),
   specialties: z.array(z.string()).default([]),
   commissionPercentage: z.number().min(0).max(100).optional(),
@@ -25,6 +26,7 @@ const createBarberSchema = z.object({
 });
 
 const updateBarberSchema = z.object({
+  phone: z.string().optional(),
   locationIds: z.array(z.string()).min(1).optional(),
   specialties: z.array(z.string()).optional(),
   commissionPercentage: z.number().min(0).max(100).optional(),
@@ -62,6 +64,7 @@ export async function createBarber(req: Request, res: Response): Promise<void> {
     businessId,
     userId: user._id,
     locationIds: data.locationIds,
+    phone: data.phone,
     specialties: data.specialties,
     commissionPercentage: data.commissionPercentage,
     shifts: data.shifts,

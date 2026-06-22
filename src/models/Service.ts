@@ -1,4 +1,5 @@
 import { Schema, model, Types } from "mongoose";
+import type { DepositType } from "./Business";
 
 export interface ServiceDocument {
   _id: Types.ObjectId;
@@ -8,6 +9,11 @@ export interface ServiceDocument {
   durationMinutes: number;
   priceCents: number;
   photo?: string;
+  // Solo se usan si el negocio tiene depositScope = "per_service"; si no están definidos,
+  // se cae en la configuración global del negocio.
+  depositType?: DepositType;
+  depositValueCents?: number;
+  depositValuePercent?: number;
   isActive: boolean;
   createdAt: Date;
   updatedAt: Date;
@@ -21,6 +27,9 @@ const serviceSchema = new Schema<ServiceDocument>(
     durationMinutes: { type: Number, required: true, min: 5 },
     priceCents: { type: Number, required: true, min: 0 },
     photo: { type: String },
+    depositType: { type: String, enum: ["percentage", "fixed"] },
+    depositValueCents: { type: Number, min: 0 },
+    depositValuePercent: { type: Number, min: 0, max: 100 },
     isActive: { type: Boolean, default: true },
   },
   { timestamps: true }

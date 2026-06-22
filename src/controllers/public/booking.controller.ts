@@ -7,10 +7,16 @@ import { Service } from "../../models/Service";
 import { Barber } from "../../models/Barber";
 import { Client } from "../../models/Client";
 import { Appointment } from "../../models/Appointment";
-import { getAvailableSlots } from "../../services/shiftAvailability";
-import { assertWithinBarberShift } from "../../services/shiftAvailability";
+import { getAvailableSlots, assertWithinBarberShift } from "../../services/shiftAvailability";
+import { computeDepositCents } from "../../services/deposit";
 import { AppError } from "../../utils/AppError";
 import { sendWhatsAppMessage } from "../../whatsapp/manager";
+import {
+  buildClientAwaitingConfirmationMessage,
+  buildOwnerNewBookingMessage,
+  buildBarberConfirmationRequestMessage,
+  buildAppointmentConfirmedMessage,
+} from "../../whatsapp/messages";
 
 async function resolveBookableBusiness(slug: string) {
   const business = await Business.findOne({ slug });
@@ -28,7 +34,7 @@ export async function getPublicBusinessInfo(req: Request, res: Response): Promis
   const [locations, services, barbers] = await Promise.all([
     Location.find({ businessId: business._id, isActive: true }).select("name address"),
     Service.find({ businessId: business._id, isActive: true }).select(
-      "name durationMinutes priceCents photo locationIds"
+      "name durationMinutes priceCents photo locationIds depositType depositValueCents depositValuePercent"
     ),
     Barber.find({ businessId: business._id, isActive: true })
       .select("locationIds favoriteServiceIds")
@@ -38,6 +44,13 @@ export async function getPublicBusinessInfo(req: Request, res: Response): Promis
   res.json({
     business: { name: business.name },
     bookable: isBookable,
+    deposit: {
+      enabled: business.depositEnabled,
+      scope: business.depositScope,
+      type: business.depositType,
+      valueCents: business.depositValueCents,
+      valuePercent: business.depositValuePercent,
+    },
     locations,
     services,
     barbers: barbers.map((b) => {
@@ -103,6 +116,9 @@ const createPublicAppointmentSchema = z.object({
     name: z.string().min(2),
     phone: z.string().min(6),
   }),
+  depositMethod: z.enum(["proof_photo", "trust_code"]).optional(),
+  depositProofPhoto: z.string().optional(),
+  trustCode: z.string().optional(),
 });
 
 export async function createPublicAppointment(req: Request, res: Response): Promise<void> {
@@ -114,10 +130,17 @@ export async function createPublicAppointment(req: Request, res: Response): Prom
   const data = createPublicAppointmentSchema.parse(req.body);
   const businessId = business._id;
 
-  const barber = await Barber.findOne({ _id: data.barberId, businessId, isActive: true });
+  const barber = await Barber.findOne({ _id: data.barberId, businessId, isActive: true }).populate(
+    "userId",
+    "name"
+  );
   if (!barber) {
     throw new AppError("Barbero no encontrado", 404);
   }
+  const barberName =
+    typeof barber.userId === "object" && barber.userId
+      ? (barber.userId as unknown as { name: string }).name
+      : "tu barbero";
   if (!barber.locationIds.some((id) => id.toString() === data.locationId)) {
     throw new AppError("Ese barbero no trabaja en la sede seleccionada", 400);
   }
@@ -148,6 +171,28 @@ export async function createPublicAppointment(req: Request, res: Response): Prom
     throw new AppError("Ese horario ya no está disponible, elige otro", 409);
   }
 
+  // --- Resolución del adelanto ---
+  const requiredDepositCents = computeDepositCents(business, services);
+  let depositStatus: "not_required" | "awaiting_barber" = "not_required";
+  let depositMethod: "proof_photo" | "trust_code" | undefined;
+  let depositProofPhoto: string | undefined;
+
+  if (requiredDepositCents > 0) {
+    if (data.depositMethod === "trust_code") {
+      if (!data.trustCode || !business.trustCode || data.trustCode.trim() !== business.trustCode) {
+        throw new AppError("El código no es válido. Pídele el código correcto al negocio.", 400);
+      }
+      depositMethod = "trust_code";
+    } else {
+      if (!data.depositProofPhoto) {
+        throw new AppError("Debes adjuntar el comprobante del adelanto o usar el código del negocio", 400);
+      }
+      depositMethod = "proof_photo";
+      depositProofPhoto = data.depositProofPhoto;
+    }
+    depositStatus = "awaiting_barber";
+  }
+
   const client = await Client.findOneAndUpdate(
     { businessId, phone: data.client.phone.trim() },
     { $setOnInsert: { businessId, phone: data.client.phone.trim(), name: data.client.name } },
@@ -164,10 +209,63 @@ export async function createPublicAppointment(req: Request, res: Response): Prom
     endsAt,
     totalPriceCents,
     source: "public",
+    depositStatus,
+    depositAmountCents: requiredDepositCents > 0 ? requiredDepositCents : undefined,
+    depositMethod,
+    depositProofPhoto,
   });
 
-  const confirmationMessage = `Hola ${client.name} 👋, tu cita en *${business.name}* quedó agendada para el ${startsAt.toLocaleDateString("es-PE")} a las ${startsAt.toLocaleTimeString("es-PE", { hour: "2-digit", minute: "2-digit" })}. ¡Te esperamos!`;
-  sendWhatsAppMessage(businessId.toString(), client.phone, confirmationMessage).catch(() => {});
+  if (depositStatus === "awaiting_barber") {
+    sendWhatsAppMessage(
+      businessId.toString(),
+      client.phone,
+      buildClientAwaitingConfirmationMessage({
+        clientName: client.name,
+        businessName: business.name,
+        startsAt,
+      })
+    ).catch(() => {});
 
-  res.status(201).json({ appointmentId: appointment._id });
+    if (business.phone) {
+      sendWhatsAppMessage(
+        businessId.toString(),
+        business.phone,
+        buildOwnerNewBookingMessage({
+          businessName: business.name,
+          clientName: client.name,
+          barberName,
+          startsAt,
+        })
+      ).catch(() => {});
+    }
+
+    if (barber.phone) {
+      const code = appointment._id.toString().slice(-6);
+      sendWhatsAppMessage(
+        businessId.toString(),
+        barber.phone,
+        buildBarberConfirmationRequestMessage({
+          barberName,
+          clientName: client.name,
+          serviceNames: services.map((s) => s.name),
+          startsAt,
+          code,
+        })
+      ).catch(() => {});
+    }
+  } else {
+    // Sin adelanto requerido: queda directamente como una cita normal pendiente,
+    // igual que las que crea el staff — solo confirmamos al cliente.
+    sendWhatsAppMessage(
+      businessId.toString(),
+      client.phone,
+      buildAppointmentConfirmedMessage({
+        recipientName: client.name,
+        businessName: business.name,
+        startsAt,
+      })
+    ).catch(() => {});
+  }
+
+  res.status(201).json({ appointmentId: appointment._id, depositStatus, requiredDepositCents });
 }

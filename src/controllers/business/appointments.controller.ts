@@ -130,6 +130,20 @@ export async function updateAppointmentStatus(req: Request, res: Response): Prom
     filter.barberId = await resolveOwnBarberId(req);
   }
 
+  const current = await Appointment.findOne(filter);
+  if (!current) {
+    throw new AppError("Cita no encontrada", 404);
+  }
+  if (
+    status !== "cancelled" &&
+    ["awaiting_barber", "awaiting_owner_review"].includes(current.depositStatus)
+  ) {
+    throw new AppError(
+      "Esta cita todavía espera confirmación de disponibilidad o del adelanto",
+      409
+    );
+  }
+
   const appointment = await Appointment.findOneAndUpdate(filter, { status }, { new: true });
   if (!appointment) {
     throw new AppError("Cita no encontrada", 404);

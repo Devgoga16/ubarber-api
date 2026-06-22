@@ -9,6 +9,9 @@ const serviceSchema = z.object({
   priceCents: z.number().int().min(0),
   locationIds: z.array(z.string()).min(1),
   photo: z.string().optional(),
+  depositType: z.enum(["percentage", "fixed"]).optional(),
+  depositValueCents: z.number().int().min(0).optional(),
+  depositValuePercent: z.number().min(0).max(100).optional(),
 });
 
 export async function listServices(req: Request, res: Response): Promise<void> {

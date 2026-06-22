@@ -47,6 +47,18 @@ import {
 import { getDashboardStats, getMySubscription } from "../controllers/business/dashboard.controller";
 import { getPublicLinkInfo } from "../controllers/business/publicLink.controller";
 import {
+  getDepositSettings,
+  updateDepositSettings,
+  regenerateTrustCode,
+} from "../controllers/business/depositSettings.controller";
+import {
+  listPendingConfirmations,
+  confirmAvailability,
+  rejectAvailability,
+  confirmDeposit,
+  rejectDeposit,
+} from "../controllers/business/appointmentConfirmations.controller";
+import {
   getWhatsAppStatus,
   connectWhatsApp,
   disconnectWhatsApp,
@@ -89,6 +101,16 @@ businessRouter.patch("/services/:id/status", manage, asyncHandler(setServiceStat
 
 businessRouter.get("/public-link", manage, asyncHandler(getPublicLinkInfo));
 
+businessRouter.get("/deposit-settings", manage, asyncHandler(getDepositSettings));
+businessRouter.patch("/deposit-settings", manage, asyncHandler(updateDepositSettings));
+businessRouter.post("/deposit-settings/regenerate-code", manage, asyncHandler(regenerateTrustCode));
+
+businessRouter.get("/appointments/pending-confirmation", asyncHandler(listPendingConfirmations));
+businessRouter.patch("/appointments/:id/confirm-availability", asyncHandler(confirmAvailability));
+businessRouter.patch("/appointments/:id/reject-availability", asyncHandler(rejectAvailability));
+businessRouter.patch("/appointments/:id/confirm-deposit", manage, asyncHandler(confirmDeposit));
+businessRouter.patch("/appointments/:id/reject-deposit", manage, asyncHandler(rejectDeposit));
+
 businessRouter.get("/dashboard/stats", manage, asyncHandler(getDashboardStats));
 businessRouter.get("/subscription", asyncHandler(getMySubscription));
 
@@ -97,7 +119,7 @@ businessRouter.post("/appointments", asyncHandler(createAppointment));
 businessRouter.patch("/appointments/:id/status", asyncHandler(updateAppointmentStatus));
 businessRouter.patch("/appointments/:id/payment", asyncHandler(registerAppointmentPayment));
 
-businessRouter.get("/whatsapp/status", manage, asyncHandler(getWhatsAppStatus));
+businessRouter.get("/whatsapp/status", asyncHandler(getWhatsAppStatus));
 businessRouter.post("/whatsapp/connect", manage, asyncHandler(connectWhatsApp));
 businessRouter.post("/whatsapp/disconnect", manage, asyncHandler(disconnectWhatsApp));
 

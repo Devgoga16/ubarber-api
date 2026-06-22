@@ -1,6 +1,15 @@
 import { Schema, model, Types } from "mongoose";
 import { APPOINTMENT_STATUSES, type AppointmentStatus } from "../types/roles";
 
+export const DEPOSIT_STATUSES = [
+  "not_required",
+  "awaiting_barber",
+  "awaiting_owner_review",
+  "confirmed",
+  "rejected",
+] as const;
+export type DepositStatus = (typeof DEPOSIT_STATUSES)[number];
+
 export interface AppointmentDocument {
   _id: Types.ObjectId;
   businessId: Types.ObjectId;
@@ -20,6 +29,13 @@ export interface AppointmentDocument {
   notes?: string;
   source: "staff" | "public";
   createdBy?: Types.ObjectId;
+  depositStatus: DepositStatus;
+  depositAmountCents?: number;
+  depositMethod?: "proof_photo" | "trust_code";
+  depositProofPhoto?: string;
+  barberAvailabilityConfirmedAt?: Date;
+  depositConfirmedAt?: Date;
+  rejectionReason?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -43,6 +59,13 @@ const appointmentSchema = new Schema<AppointmentDocument>(
     notes: { type: String, trim: true },
     source: { type: String, enum: ["staff", "public"], default: "staff" },
     createdBy: { type: Schema.Types.ObjectId, ref: "User" },
+    depositStatus: { type: String, enum: DEPOSIT_STATUSES, default: "not_required" },
+    depositAmountCents: { type: Number, min: 0 },
+    depositMethod: { type: String, enum: ["proof_photo", "trust_code"] },
+    depositProofPhoto: { type: String },
+    barberAvailabilityConfirmedAt: { type: Date },
+    depositConfirmedAt: { type: Date },
+    rejectionReason: { type: String, trim: true },
   },
   { timestamps: true }
 );

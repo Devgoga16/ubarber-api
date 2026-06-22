@@ -7,6 +7,14 @@ import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
 import { useMongoAuthState } from "./mongoAuthState";
 import { WhatsAppSession, type WhatsAppConnectionStatus } from "../models/WhatsAppSession";
+import { Appointment } from "../models/Appointment";
+import { Barber } from "../models/Barber";
+import { Business } from "../models/Business";
+import {
+  buildOwnerNeedsPaymentReviewMessage,
+  buildAppointmentConfirmedMessage,
+  buildAppointmentRejectedMessage,
+} from "./messages";
 
 interface SessionEntry {
   socket: WASocket;
@@ -57,6 +65,18 @@ export async function connectBusinessWhatsApp(businessId: string): Promise<void>
   );
 
   socket.ev.on("creds.update", saveCreds);
+
+  socket.ev.on("messages.upsert", async ({ messages }) => {
+    for (const msg of messages) {
+      if (msg.key.fromMe || !msg.message) continue;
+      const text =
+        msg.message.conversation ?? msg.message.extendedTextMessage?.text ?? undefined;
+      if (!text) continue;
+      const senderJid = msg.key.remoteJid;
+      if (!senderJid) continue;
+      handleIncomingReply(businessId, senderJid, text).catch(() => {});
+    }
+  });
 
   socket.ev.on("connection.update", async (update) => {
     const entry = sessions.get(businessId);
@@ -133,6 +153,88 @@ export async function sendWhatsAppMessage(businessId: string, phone: string, tex
     return true;
   } catch {
     return false;
+  }
+}
+
+function jidToDigits(jid: string): string {
+  return jid.split("@")[0].replace(/\D/g, "");
+}
+
+/**
+ * Permite que un barbero conteste por WhatsApp con texto plano (ej. "SI a1b2c3" / "NO a1b2c3")
+ * en vez de tener que abrir la app — WhatsApp ya no soporta botones interactivos de forma
+ * confiable fuera de la API oficial de Meta, así que esta es la vía "responder por WhatsApp".
+ */
+async function handleIncomingReply(businessId: string, senderJid: string, text: string): Promise<void> {
+  const match = text.trim().match(/^(si|sí|no)\s+([a-f0-9]{4,8})$/i);
+  if (!match) return;
+
+  const decision = match[1].toLowerCase().startsWith("s") ? "confirm" : "reject";
+  const code = match[2].toLowerCase();
+  const senderDigits = jidToDigits(senderJid);
+
+  const candidates = await Appointment.find({ businessId, depositStatus: "awaiting_barber" })
+    .populate("clientId", "name phone")
+    .populate({ path: "barberId", populate: { path: "userId", select: "name" } });
+
+  const target = candidates.find((a) => a._id.toString().slice(-6) === code);
+  if (!target) return;
+
+  const barber = target.barberId as unknown as { phone?: string; userId?: { name: string } };
+  if (!barber?.phone || jidToDigits(barber.phone) !== senderDigits) return; // solo el barbero asignado puede confirmar
+
+  const business = await Business.findById(businessId);
+  const client = target.clientId as unknown as { name: string; phone: string };
+
+  if (decision === "confirm") {
+    target.barberAvailabilityConfirmedAt = new Date();
+    if (target.depositMethod === "trust_code") {
+      target.depositStatus = "confirmed";
+      target.depositConfirmedAt = new Date();
+      await target.save();
+      if (client?.phone) {
+        await sendWhatsAppMessage(
+          businessId,
+          client.phone,
+          buildAppointmentConfirmedMessage({
+            recipientName: client.name,
+            businessName: business?.name ?? "el negocio",
+            startsAt: target.startsAt,
+          })
+        );
+      }
+    } else {
+      target.depositStatus = "awaiting_owner_review";
+      await target.save();
+      if (business?.phone) {
+        await sendWhatsAppMessage(
+          businessId,
+          business.phone,
+          buildOwnerNeedsPaymentReviewMessage({
+            businessName: business.name,
+            clientName: client?.name ?? "cliente",
+            barberName: barber.userId?.name ?? "el barbero",
+            depositAmountCents: target.depositAmountCents ?? 0,
+          })
+        );
+      }
+    }
+  } else {
+    target.status = "cancelled";
+    target.depositStatus = "rejected";
+    target.rejectionReason = "El barbero no tiene disponibilidad";
+    await target.save();
+    if (client?.phone) {
+      await sendWhatsAppMessage(
+        businessId,
+        client.phone,
+        buildAppointmentRejectedMessage({
+          recipientName: client.name,
+          businessName: business?.name ?? "el negocio",
+          reason: target.rejectionReason,
+        })
+      );
+    }
   }
 }
 
