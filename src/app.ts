@@ -25,6 +25,14 @@ export function createApp() {
     app.use(morgan("dev"));
   }
 
+  // Dokploy y otros healthchecks suelen pegarle a la raíz, no a /api/health.
+  app.get("/health", (_req, res) => {
+    res.json({ status: "ok" });
+  });
+  app.get("/", (_req, res) => {
+    res.json({ status: "ok", service: "ubarber-api" });
+  });
+
   app.use("/api", apiRouter);
 
   app.use(notFoundHandler);
