@@ -32,3 +32,60 @@ export function assertWithinBarberShift(
     );
   }
 }
+
+const SLOT_STEP_MINUTES = 15;
+
+/**
+ * Genera los horarios "HH:mm" en los que el barbero está disponible ese día para una
+ * sede dada, descontando citas ya agendadas y horas pasadas (si la fecha es hoy).
+ */
+export function getAvailableSlots(
+  barber: BarberDocument,
+  locationId: string,
+  date: Date,
+  durationMinutes: number,
+  busyRanges: { startsAt: Date; endsAt: Date }[]
+): string[] {
+  const day = date.getDay();
+  const dayShifts = barber.shifts.filter(
+    (shift) => shift.locationId.toString() === locationId && shift.day === day
+  );
+  if (dayShifts.length === 0) return [];
+
+  const now = new Date();
+  const isToday =
+    now.getFullYear() === date.getFullYear() &&
+    now.getMonth() === date.getMonth() &&
+    now.getDate() === date.getDate();
+  const nowMinutes = now.getHours() * 60 + now.getMinutes();
+
+  const slots: string[] = [];
+
+  for (const shift of dayShifts) {
+    const shiftStart = toMinutes(shift.startTime);
+    const shiftEnd = toMinutes(shift.endTime);
+
+    for (
+      let slotStart = shiftStart;
+      slotStart + durationMinutes <= shiftEnd;
+      slotStart += SLOT_STEP_MINUTES
+    ) {
+      if (isToday && slotStart <= nowMinutes) continue;
+
+      const slotStartAt = new Date(date);
+      slotStartAt.setHours(0, slotStart, 0, 0);
+      const slotEndAt = new Date(slotStartAt.getTime() + durationMinutes * 60_000);
+
+      const overlaps = busyRanges.some(
+        (range) => slotStartAt < range.endsAt && slotEndAt > range.startsAt
+      );
+      if (overlaps) continue;
+
+      const hh = String(Math.floor(slotStart / 60)).padStart(2, "0");
+      const mm = String(slotStart % 60).padStart(2, "0");
+      slots.push(`${hh}:${mm}`);
+    }
+  }
+
+  return slots;
+}

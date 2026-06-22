@@ -6,6 +6,8 @@ import { Barber } from "../../models/Barber";
 import { APPOINTMENT_STATUSES } from "../../types/roles";
 import { AppError } from "../../utils/AppError";
 import { assertWithinBarberShift } from "../../services/shiftAvailability";
+import { sendWhatsAppMessage } from "../../whatsapp/manager";
+import { buildPaymentSummaryMessage } from "../../whatsapp/messages";
 
 const createAppointmentSchema = z.object({
   locationId: z.string(),
@@ -152,9 +154,30 @@ export async function registerAppointmentPayment(req: Request, res: Response): P
       ...(data.receiptPhoto ? { receiptPhoto: data.receiptPhoto } : {}),
     },
     { new: true }
-  );
+  )
+    .populate("clientId", "name phone")
+    .populate("serviceIds", "name")
+    .populate("paymentMethodId", "name")
+    .populate("businessId", "name");
   if (!appointment) {
     throw new AppError("Cita no encontrada", 404);
   }
+
+  const client = appointment.clientId as unknown as { name: string; phone: string };
+  const services = appointment.serviceIds as unknown as { name: string }[];
+  const paymentMethod = appointment.paymentMethodId as unknown as { name: string };
+  const business = appointment.businessId as unknown as { name: string };
+
+  if (client?.phone) {
+    const message = buildPaymentSummaryMessage({
+      clientName: client.name,
+      businessName: business?.name ?? "tu barbería",
+      serviceNames: services.map((s) => s.name),
+      totalPriceCents: appointment.totalPriceCents,
+      paymentMethodName: paymentMethod?.name ?? "—",
+    });
+    sendWhatsAppMessage(req.auth!.businessId!, client.phone, message).catch(() => {});
+  }
+
   res.json(appointment);
 }

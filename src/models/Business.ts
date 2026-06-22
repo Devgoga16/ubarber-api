@@ -6,6 +6,7 @@ export interface BusinessDocument {
   ownerName: string;
   ownerEmail: string;
   phone?: string;
+  slug?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -16,6 +17,7 @@ const businessSchema = new Schema<BusinessDocument>(
     ownerName: { type: String, required: true, trim: true },
     ownerEmail: { type: String, required: true, trim: true, lowercase: true },
     phone: { type: String, trim: true },
+    slug: { type: String, unique: true, sparse: true },
   },
   { timestamps: true }
 );

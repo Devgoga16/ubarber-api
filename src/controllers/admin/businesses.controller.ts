@@ -6,6 +6,7 @@ import { User } from "../../models/User";
 import { Plan } from "../../models/Plan";
 import { Subscription } from "../../models/Subscription";
 import { AppError } from "../../utils/AppError";
+import { ensureBusinessSlug } from "../../services/businessSlug";
 
 const createBusinessSchema = z.object({
   businessName: z.string().min(2),
@@ -45,6 +46,7 @@ export async function createBusiness(req: Request, res: Response): Promise<void>
     ownerEmail: data.ownerEmail,
     phone: data.phone,
   });
+  await ensureBusinessSlug(business);
 
   const passwordHash = await bcrypt.hash(data.ownerPassword, 10);
   const owner = await User.create({

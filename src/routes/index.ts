@@ -3,6 +3,7 @@ import mongoose from "mongoose";
 import { authRouter } from "./auth.routes";
 import { adminRouter } from "./admin.routes";
 import { businessRouter } from "./business.routes";
+import { publicRouter } from "./public.routes";
 
 export const apiRouter = Router();
 
@@ -29,3 +30,4 @@ apiRouter.get("/health", (_req, res) => {
 apiRouter.use("/auth", authRouter);
 apiRouter.use("/admin", adminRouter);
 apiRouter.use("/business", businessRouter);
+apiRouter.use("/public", publicRouter);

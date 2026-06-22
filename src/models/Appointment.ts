@@ -16,8 +16,10 @@ export interface AppointmentDocument {
   paidAt?: Date;
   paymentMethodId?: Types.ObjectId;
   receiptPhoto?: string;
+  reminderSent: boolean;
   notes?: string;
-  createdBy: Types.ObjectId;
+  source: "staff" | "public";
+  createdBy?: Types.ObjectId;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -37,8 +39,10 @@ const appointmentSchema = new Schema<AppointmentDocument>(
     paidAt: { type: Date },
     paymentMethodId: { type: Schema.Types.ObjectId, ref: "PaymentMethod" },
     receiptPhoto: { type: String },
+    reminderSent: { type: Boolean, default: false },
     notes: { type: String, trim: true },
-    createdBy: { type: Schema.Types.ObjectId, ref: "User", required: true },
+    source: { type: String, enum: ["staff", "public"], default: "staff" },
+    createdBy: { type: Schema.Types.ObjectId, ref: "User" },
   },
   { timestamps: true }
 );

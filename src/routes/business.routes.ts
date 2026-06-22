@@ -45,6 +45,12 @@ import {
   setPaymentMethodStatus,
 } from "../controllers/business/paymentMethods.controller";
 import { getDashboardStats, getMySubscription } from "../controllers/business/dashboard.controller";
+import { getPublicLinkInfo } from "../controllers/business/publicLink.controller";
+import {
+  getWhatsAppStatus,
+  connectWhatsApp,
+  disconnectWhatsApp,
+} from "../controllers/business/whatsapp.controller";
 
 export const businessRouter = Router();
 
@@ -81,6 +87,8 @@ businessRouter.post("/services", manage, asyncHandler(createService));
 businessRouter.patch("/services/:id", manage, asyncHandler(updateService));
 businessRouter.patch("/services/:id/status", manage, asyncHandler(setServiceStatus));
 
+businessRouter.get("/public-link", manage, asyncHandler(getPublicLinkInfo));
+
 businessRouter.get("/dashboard/stats", manage, asyncHandler(getDashboardStats));
 businessRouter.get("/subscription", asyncHandler(getMySubscription));
 
@@ -88,6 +96,10 @@ businessRouter.get("/appointments", asyncHandler(listAppointments));
 businessRouter.post("/appointments", asyncHandler(createAppointment));
 businessRouter.patch("/appointments/:id/status", asyncHandler(updateAppointmentStatus));
 businessRouter.patch("/appointments/:id/payment", asyncHandler(registerAppointmentPayment));
+
+businessRouter.get("/whatsapp/status", manage, asyncHandler(getWhatsAppStatus));
+businessRouter.post("/whatsapp/connect", manage, asyncHandler(connectWhatsApp));
+businessRouter.post("/whatsapp/disconnect", manage, asyncHandler(disconnectWhatsApp));
 
 businessRouter.get("/payment-methods", asyncHandler(listPaymentMethods));
 businessRouter.post("/payment-methods", manage, asyncHandler(createPaymentMethod));
