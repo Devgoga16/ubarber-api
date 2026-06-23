@@ -106,7 +106,7 @@ export async function connectBusinessWhatsApp(businessId: string): Promise<void>
         sessions.delete(businessId);
         await WhatsAppSession.findOneAndUpdate(
           { businessId },
-          { status: "disconnected", authData: undefined, phoneNumber: undefined },
+          { $set: { status: "disconnected" }, $unset: { authData: "", phoneNumber: "" } },
           { upsert: true }
         );
         return;
@@ -132,7 +132,7 @@ export async function disconnectBusinessWhatsApp(businessId: string): Promise<vo
   }
   await WhatsAppSession.findOneAndUpdate(
     { businessId },
-    { status: "disconnected", authData: undefined, phoneNumber: undefined },
+    { $set: { status: "disconnected" }, $unset: { authData: "", phoneNumber: "" } },
     { upsert: true }
   );
 }
@@ -161,27 +161,45 @@ function jidToDigits(jid: string): string {
 }
 
 /**
- * Permite que un barbero conteste por WhatsApp con texto plano (ej. "SI a1b2c3" / "NO a1b2c3")
+ * Permite que un barbero conteste por WhatsApp con texto plano ("SI" / "NO", sin código)
  * en vez de tener que abrir la app — WhatsApp ya no soporta botones interactivos de forma
  * confiable fuera de la API oficial de Meta, así que esta es la vía "responder por WhatsApp".
+ * El código solo se usa como desempate si el barbero tiene más de una solicitud pendiente.
  */
 async function handleIncomingReply(businessId: string, senderJid: string, text: string): Promise<void> {
-  const match = text.trim().match(/^(si|sí|no)\s+([a-f0-9]{4,8})$/i);
+  const match = text.trim().match(/^(si|sí|no)(?:\s+([a-f0-9]{4,8}))?$/i);
   if (!match) return;
 
   const decision = match[1].toLowerCase().startsWith("s") ? "confirm" : "reject";
-  const code = match[2].toLowerCase();
+  const code = match[2]?.toLowerCase();
   const senderDigits = jidToDigits(senderJid);
 
   const candidates = await Appointment.find({ businessId, depositStatus: "awaiting_barber" })
     .populate("clientId", "name phone")
     .populate({ path: "barberId", populate: { path: "userId", select: "name" } });
 
-  const target = candidates.find((a) => a._id.toString().slice(-6) === code);
+  const fromThisBarber = candidates.filter((a) => {
+    const barber = a.barberId as unknown as { phone?: string };
+    return barber?.phone && jidToDigits(barber.phone) === senderDigits;
+  });
+
+  let target = code
+    ? fromThisBarber.find((a) => a._id.toString().slice(-6) === code)
+    : fromThisBarber[0];
+
   if (!target) return;
 
+  if (!code && fromThisBarber.length > 1) {
+    // Hay varias citas esperando confirmación de este barbero: pedimos el código para no confundirlas.
+    await sendWhatsAppMessage(
+      businessId,
+      senderJid.split("@")[0],
+      `Tienes ${fromThisBarber.length} solicitudes pendientes. Responde con el código que viene en cada mensaje, ej: *SI ${fromThisBarber[0]._id.toString().slice(-6)}*`
+    );
+    return;
+  }
+
   const barber = target.barberId as unknown as { phone?: string; userId?: { name: string } };
-  if (!barber?.phone || jidToDigits(barber.phone) !== senderDigits) return; // solo el barbero asignado puede confirmar
 
   const business = await Business.findById(businessId);
   const client = target.clientId as unknown as { name: string; phone: string };

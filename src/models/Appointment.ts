@@ -24,6 +24,7 @@ export interface AppointmentDocument {
   paid: boolean;
   paidAt?: Date;
   paymentMethodId?: Types.ObjectId;
+  finalPaymentAmountCents?: number;
   receiptPhoto?: string;
   reminderSent: boolean;
   notes?: string;
@@ -33,6 +34,7 @@ export interface AppointmentDocument {
   depositAmountCents?: number;
   depositMethod?: "proof_photo" | "trust_code";
   depositProofPhoto?: string;
+  depositPaymentMethodId?: Types.ObjectId;
   barberAvailabilityConfirmedAt?: Date;
   depositConfirmedAt?: Date;
   rejectionReason?: string;
@@ -54,6 +56,7 @@ const appointmentSchema = new Schema<AppointmentDocument>(
     paid: { type: Boolean, default: false },
     paidAt: { type: Date },
     paymentMethodId: { type: Schema.Types.ObjectId, ref: "PaymentMethod" },
+    finalPaymentAmountCents: { type: Number, min: 0 },
     receiptPhoto: { type: String },
     reminderSent: { type: Boolean, default: false },
     notes: { type: String, trim: true },
@@ -63,6 +66,7 @@ const appointmentSchema = new Schema<AppointmentDocument>(
     depositAmountCents: { type: Number, min: 0 },
     depositMethod: { type: String, enum: ["proof_photo", "trust_code"] },
     depositProofPhoto: { type: String },
+    depositPaymentMethodId: { type: Schema.Types.ObjectId, ref: "PaymentMethod" },
     barberAvailabilityConfirmedAt: { type: Date },
     depositConfirmedAt: { type: Date },
     rejectionReason: { type: String, trim: true },

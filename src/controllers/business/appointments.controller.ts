@@ -62,6 +62,7 @@ export async function listAppointments(req: Request, res: Response): Promise<voi
     .populate("clientId", "name phone")
     .populate("serviceIds", "name durationMinutes priceCents")
     .populate("paymentMethodId", "name")
+    .populate("depositPaymentMethodId", "name")
     .sort({ startsAt: 1 });
   res.json(appointments);
 }
@@ -159,12 +160,24 @@ export async function registerAppointmentPayment(req: Request, res: Response): P
     filter.barberId = await resolveOwnBarberId(req);
   }
 
+  const existing = await Appointment.findOne(filter);
+  if (!existing) {
+    throw new AppError("Cita no encontrada", 404);
+  }
+  // Si ya se cobró un adelanto (comprobante confirmado por el dueño), el cobro final es solo el saldo restante.
+  const alreadyCollectedCents =
+    existing.depositStatus === "confirmed" && existing.depositMethod === "proof_photo"
+      ? existing.depositAmountCents ?? 0
+      : 0;
+  const finalPaymentAmountCents = Math.max(existing.totalPriceCents - alreadyCollectedCents, 0);
+
   const appointment = await Appointment.findOneAndUpdate(
     filter,
     {
       paid: true,
       paidAt: new Date(),
       paymentMethodId: data.paymentMethodId,
+      finalPaymentAmountCents,
       ...(data.receiptPhoto ? { receiptPhoto: data.receiptPhoto } : {}),
     },
     { new: true }
@@ -187,7 +200,7 @@ export async function registerAppointmentPayment(req: Request, res: Response): P
       clientName: client.name,
       businessName: business?.name ?? "tu barbería",
       serviceNames: services.map((s) => s.name),
-      totalPriceCents: appointment.totalPriceCents,
+      totalPriceCents: appointment.finalPaymentAmountCents ?? appointment.totalPriceCents,
       paymentMethodName: paymentMethod?.name ?? "—",
     });
     sendWhatsAppMessage(req.auth!.businessId!, client.phone, message).catch(() => {});

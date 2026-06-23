@@ -7,6 +7,7 @@ import { Service } from "../../models/Service";
 import { Barber } from "../../models/Barber";
 import { Client } from "../../models/Client";
 import { Appointment } from "../../models/Appointment";
+import { PaymentMethod } from "../../models/PaymentMethod";
 import { getAvailableSlots, assertWithinBarberShift } from "../../services/shiftAvailability";
 import { computeDepositCents } from "../../services/deposit";
 import { AppError } from "../../utils/AppError";
@@ -31,7 +32,7 @@ async function resolveBookableBusiness(slug: string) {
 export async function getPublicBusinessInfo(req: Request, res: Response): Promise<void> {
   const { business, isBookable } = await resolveBookableBusiness(req.params.slug as string);
 
-  const [locations, services, barbers] = await Promise.all([
+  const [locations, services, barbers, paymentMethods] = await Promise.all([
     Location.find({ businessId: business._id, isActive: true }).select("name address"),
     Service.find({ businessId: business._id, isActive: true }).select(
       "name durationMinutes priceCents photo locationIds depositType depositValueCents depositValuePercent"
@@ -39,6 +40,7 @@ export async function getPublicBusinessInfo(req: Request, res: Response): Promis
     Barber.find({ businessId: business._id, isActive: true })
       .select("locationIds favoriteServiceIds")
       .populate("userId", "name"),
+    PaymentMethod.find({ businessId: business._id, isActive: true }).select("name"),
   ]);
 
   res.json({
@@ -53,6 +55,7 @@ export async function getPublicBusinessInfo(req: Request, res: Response): Promis
     },
     locations,
     services,
+    paymentMethods,
     barbers: barbers.map((b) => {
       const user = b.userId as unknown as { name: string } | null;
       return {
@@ -118,6 +121,7 @@ const createPublicAppointmentSchema = z.object({
   }),
   depositMethod: z.enum(["proof_photo", "trust_code"]).optional(),
   depositProofPhoto: z.string().optional(),
+  depositPaymentMethodId: z.string().optional(),
   trustCode: z.string().optional(),
 });
 
@@ -176,6 +180,7 @@ export async function createPublicAppointment(req: Request, res: Response): Prom
   let depositStatus: "not_required" | "awaiting_barber" = "not_required";
   let depositMethod: "proof_photo" | "trust_code" | undefined;
   let depositProofPhoto: string | undefined;
+  let depositPaymentMethodId: string | undefined;
 
   if (requiredDepositCents > 0) {
     if (data.depositMethod === "trust_code") {
@@ -187,8 +192,20 @@ export async function createPublicAppointment(req: Request, res: Response): Prom
       if (!data.depositProofPhoto) {
         throw new AppError("Debes adjuntar el comprobante del adelanto o usar el código del negocio", 400);
       }
+      if (!data.depositPaymentMethodId) {
+        throw new AppError("Debes indicar con qué método pagaste el adelanto", 400);
+      }
+      const method = await PaymentMethod.findOne({
+        _id: data.depositPaymentMethodId,
+        businessId,
+        isActive: true,
+      });
+      if (!method) {
+        throw new AppError("El método de pago seleccionado no es válido", 400);
+      }
       depositMethod = "proof_photo";
       depositProofPhoto = data.depositProofPhoto;
+      depositPaymentMethodId = method._id.toString();
     }
     depositStatus = "awaiting_barber";
   }
@@ -213,6 +230,7 @@ export async function createPublicAppointment(req: Request, res: Response): Prom
     depositAmountCents: requiredDepositCents > 0 ? requiredDepositCents : undefined,
     depositMethod,
     depositProofPhoto,
+    depositPaymentMethodId,
   });
 
   if (depositStatus === "awaiting_barber") {

@@ -65,9 +65,8 @@ export function buildBarberConfirmationRequestMessage(params: {
     `Cliente: ${params.clientName}\n` +
     `Servicio: ${params.serviceNames.join(", ")}\n` +
     `Fecha: ${formatDateTime(params.startsAt)}\n\n` +
-    `¿Tienes disponibilidad? Responde:\n` +
-    `*SI ${params.code}* para confirmar\n` +
-    `*NO ${params.code}* para rechazar\n\n` +
+    `¿Tienes disponibilidad? Responde *SI* para confirmar o *NO* para rechazar.\n` +
+    `(Si tienes más de una solicitud pendiente, te pediremos el código: ${params.code})\n\n` +
     `(También puedes confirmarlo desde la app, en "Mi agenda")`
   );
 }
