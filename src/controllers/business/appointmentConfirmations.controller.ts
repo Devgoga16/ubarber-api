@@ -5,11 +5,8 @@ import { Barber } from "../../models/Barber";
 import { Business } from "../../models/Business";
 import { AppError } from "../../utils/AppError";
 import { sendWhatsAppMessage } from "../../whatsapp/manager";
-import {
-  buildOwnerNeedsPaymentReviewMessage,
-  buildAppointmentConfirmedMessage,
-  buildAppointmentRejectedMessage,
-} from "../../whatsapp/messages";
+import { buildAppointmentConfirmedMessage, buildAppointmentRejectedMessage } from "../../whatsapp/messages";
+import { confirmBarberAvailability, rejectBarberAvailability } from "../../services/appointmentConfirmation";
 
 async function resolveOwnBarberId(req: Request): Promise<string> {
   const barber = await Barber.findOne({
@@ -62,50 +59,7 @@ async function loadAppointmentForConfirmation(req: Request, expectedDepositStatu
 
 export async function confirmAvailability(req: Request, res: Response): Promise<void> {
   const appointment = await loadAppointmentForConfirmation(req, "awaiting_barber");
-  const business = await Business.findById(req.auth!.businessId);
-
-  const client = appointment.clientId as unknown as { name: string; phone: string };
-  const barber = appointment.barberId as unknown as { userId?: { name: string } };
-  const barberName = barber?.userId?.name ?? "el barbero";
-
-  appointment.barberAvailabilityConfirmedAt = new Date();
-
-  if (appointment.depositMethod === "trust_code") {
-    appointment.depositStatus = "confirmed";
-    appointment.depositConfirmedAt = new Date();
-    await appointment.save();
-
-    const businessId = req.auth!.businessId!;
-    if (client?.phone) {
-      sendWhatsAppMessage(
-        businessId,
-        client.phone,
-        buildAppointmentConfirmedMessage({
-          recipientName: client.name,
-          businessName: business?.name ?? "el negocio",
-          startsAt: appointment.startsAt,
-        })
-      ).catch(() => {});
-    }
-  } else {
-    appointment.depositStatus = "awaiting_owner_review";
-    await appointment.save();
-
-    const businessId = req.auth!.businessId!;
-    if (business?.phone) {
-      sendWhatsAppMessage(
-        businessId,
-        business.phone,
-        buildOwnerNeedsPaymentReviewMessage({
-          businessName: business.name,
-          clientName: client?.name ?? "cliente",
-          barberName,
-          depositAmountCents: appointment.depositAmountCents ?? 0,
-        })
-      ).catch(() => {});
-    }
-  }
-
+  await confirmBarberAvailability(appointment as any);
   res.json(appointment);
 }
 
@@ -114,27 +68,7 @@ const rejectSchema = z.object({ reason: z.string().optional() });
 export async function rejectAvailability(req: Request, res: Response): Promise<void> {
   const { reason } = rejectSchema.parse(req.body);
   const appointment = await loadAppointmentForConfirmation(req, "awaiting_barber");
-  const business = await Business.findById(req.auth!.businessId);
-  const client = appointment.clientId as unknown as { name: string; phone: string };
-
-  appointment.status = "cancelled";
-  appointment.depositStatus = "rejected";
-  appointment.rejectionReason = reason;
-  await appointment.save();
-
-  const businessId = req.auth!.businessId!;
-  if (client?.phone) {
-    sendWhatsAppMessage(
-      businessId,
-      client.phone,
-      buildAppointmentRejectedMessage({
-        recipientName: client.name,
-        businessName: business?.name ?? "el negocio",
-        reason,
-      })
-    ).catch(() => {});
-  }
-
+  await rejectBarberAvailability(appointment as any, reason);
   res.json(appointment);
 }
 

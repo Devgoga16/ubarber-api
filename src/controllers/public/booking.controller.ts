@@ -1,5 +1,7 @@
 import type { Request, Response } from "express";
+import { randomBytes } from "crypto";
 import { z } from "zod";
+import { env } from "../../config/env";
 import { Business } from "../../models/Business";
 import { Subscription } from "../../models/Subscription";
 import { Location } from "../../models/Location";
@@ -231,6 +233,7 @@ export async function createPublicAppointment(req: Request, res: Response): Prom
     depositMethod,
     depositProofPhoto,
     depositPaymentMethodId,
+    confirmationToken: depositStatus === "awaiting_barber" ? randomBytes(20).toString("hex") : undefined,
   });
 
   if (depositStatus === "awaiting_barber") {
@@ -258,7 +261,7 @@ export async function createPublicAppointment(req: Request, res: Response): Prom
     }
 
     if (barber.phone) {
-      const code = appointment._id.toString().slice(-6);
+      const confirmationUrl = `${env.publicWebUrl}/confirmar/${appointment.confirmationToken}`;
       sendWhatsAppMessage(
         businessId.toString(),
         barber.phone,
@@ -267,7 +270,7 @@ export async function createPublicAppointment(req: Request, res: Response): Prom
           clientName: client.name,
           serviceNames: services.map((s) => s.name),
           startsAt,
-          code,
+          confirmationUrl,
         })
       ).catch(() => {});
     }

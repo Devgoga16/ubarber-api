@@ -38,6 +38,7 @@ export interface AppointmentDocument {
   barberAvailabilityConfirmedAt?: Date;
   depositConfirmedAt?: Date;
   rejectionReason?: string;
+  confirmationToken?: string;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -70,6 +71,7 @@ const appointmentSchema = new Schema<AppointmentDocument>(
     barberAvailabilityConfirmedAt: { type: Date },
     depositConfirmedAt: { type: Date },
     rejectionReason: { type: String, trim: true },
+    confirmationToken: { type: String, index: true, sparse: true },
   },
   { timestamps: true }
 );

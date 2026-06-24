@@ -58,16 +58,15 @@ export function buildBarberConfirmationRequestMessage(params: {
   clientName: string;
   serviceNames: string[];
   startsAt: Date;
-  code: string;
+  confirmationUrl: string;
 }): string {
   return (
     `Hola ${params.barberName} 👋, tienes una nueva solicitud de cita:\n` +
     `Cliente: ${params.clientName}\n` +
     `Servicio: ${params.serviceNames.join(", ")}\n` +
     `Fecha: ${formatDateTime(params.startsAt)}\n\n` +
-    `¿Tienes disponibilidad? Responde *SI* para confirmar o *NO* para rechazar.\n` +
-    `(Si tienes más de una solicitud pendiente, te pediremos el código: ${params.code})\n\n` +
-    `(También puedes confirmarlo desde la app, en "Mi agenda")`
+    `¿Tienes disponibilidad? Confirma o rechaza desde este enlace:\n${params.confirmationUrl}\n\n` +
+    `(También puedes hacerlo desde la app, en "Mi agenda")`
   );
 }
 

@@ -22,4 +22,6 @@ export const env = {
   jwtSecret: required("JWT_SECRET"),
   jwtExpiresIn: process.env.JWT_EXPIRES_IN ?? "7d",
   corsOrigin: process.env.CORS_ORIGIN ?? "http://localhost:5173",
+  // Base de la web pública para armar links (p.ej. confirmación de citas por WhatsApp).
+  publicWebUrl: process.env.PUBLIC_WEB_URL ?? process.env.CORS_ORIGIN ?? "http://localhost:5173",
 };
