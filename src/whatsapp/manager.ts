@@ -170,7 +170,15 @@ export async function sendWhatsAppMessage(businessId: string, phone: string, tex
 }
 
 function jidToDigits(jid: string): string {
-  return jid.split("@")[0].replace(/\D/g, "");
+  return normalizePeruDigits(jid.split("@")[0].replace(/\D/g, ""));
+}
+
+/**
+ * Compara siempre por los últimos 9 dígitos (el número peruano sin código de país), ya que
+ * los teléfonos de barbero se guardan a 9 dígitos pero el JID de WhatsApp llega con "51" delante.
+ */
+function normalizePeruDigits(digits: string): string {
+  return digits.slice(-9);
 }
 
 /**
