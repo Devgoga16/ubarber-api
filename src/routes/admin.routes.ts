@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { requireAuth, requireRole } from "../middlewares/auth";
 import { asyncHandler } from "../utils/asyncHandler";
-import { listPlans, createPlan, updatePlan, setPlanActive } from "../controllers/admin/plans.controller";
+import { listPlans, createPlan, updatePlan, setPlanActive, deletePlan } from "../controllers/admin/plans.controller";
 import {
   createBusiness,
   listBusinesses,
@@ -19,6 +19,7 @@ adminRouter.get("/plans", asyncHandler(listPlans));
 adminRouter.post("/plans", asyncHandler(createPlan));
 adminRouter.patch("/plans/:id", asyncHandler(updatePlan));
 adminRouter.patch("/plans/:id/active", asyncHandler(setPlanActive));
+adminRouter.delete("/plans/:id", asyncHandler(deletePlan));
 
 adminRouter.get("/businesses", asyncHandler(listBusinesses));
 adminRouter.post("/businesses", asyncHandler(createBusiness));

@@ -37,3 +37,20 @@ export async function assertCanCreateBarber(businessId: string): Promise<void> {
     );
   }
 }
+
+/** true si el plan actual del negocio incluye la integración de WhatsApp. */
+export async function isWhatsAppEnabled(businessId: string): Promise<boolean> {
+  const subscription = await Subscription.findOne({ businessId });
+  if (!subscription) return true;
+  const plan = await Plan.findById(subscription.planId);
+  return plan?.whatsappEnabled ?? true;
+}
+
+export async function assertWhatsAppEnabled(businessId: string): Promise<void> {
+  if (!(await isWhatsAppEnabled(businessId))) {
+    throw new AppError(
+      "Tu plan actual no incluye la integración de WhatsApp. Actualiza tu plan para activarla.",
+      402
+    );
+  }
+}

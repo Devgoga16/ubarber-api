@@ -4,13 +4,15 @@ import {
   disconnectBusinessWhatsApp,
   getSessionStatus,
 } from "../../whatsapp/manager";
+import { isWhatsAppEnabled } from "../../services/planLimits";
 
 export async function getWhatsAppStatus(req: Request, res: Response): Promise<void> {
   const businessId = req.auth!.businessId!;
   const { status, qrDataUrl } = getSessionStatus(businessId);
   // El QR es el "login" de WhatsApp del negocio: solo owner/manager pueden verlo y escanearlo.
   const canSeeQr = req.auth!.role === "owner" || req.auth!.role === "manager";
-  res.json({ status, qr: canSeeQr ? qrDataUrl ?? null : null });
+  const planAllowsWhatsApp = await isWhatsAppEnabled(businessId);
+  res.json({ status, qr: canSeeQr ? qrDataUrl ?? null : null, planAllowsWhatsApp });
 }
 
 export async function connectWhatsApp(req: Request, res: Response): Promise<void> {

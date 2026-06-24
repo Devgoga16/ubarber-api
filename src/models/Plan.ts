@@ -13,6 +13,11 @@ export interface PlanDocument {
   };
   features: string[];
   isActive: boolean;
+  // Para la landing pública: marca el plan recomendado y permite ordenarlos manualmente.
+  highlighted: boolean;
+  sortOrder: number;
+  // Si es false, el negocio no puede conectar ni usar WhatsApp (recordatorios, confirmaciones, etc).
+  whatsappEnabled: boolean;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -30,6 +35,9 @@ const planSchema = new Schema<PlanDocument>(
     },
     features: { type: [String], default: [] },
     isActive: { type: Boolean, default: true },
+    highlighted: { type: Boolean, default: false },
+    sortOrder: { type: Number, default: 0 },
+    whatsappEnabled: { type: Boolean, default: true },
   },
   { timestamps: true }
 );

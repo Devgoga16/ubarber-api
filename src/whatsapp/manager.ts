@@ -7,6 +7,8 @@ import { Boom } from "@hapi/boom";
 import QRCode from "qrcode";
 import { useMongoAuthState } from "./mongoAuthState";
 import { WhatsAppSession, type WhatsAppConnectionStatus } from "../models/WhatsAppSession";
+import { isWhatsAppEnabled } from "../services/planLimits";
+import { AppError } from "../utils/AppError";
 
 interface SessionEntry {
   socket: WASocket;
@@ -37,6 +39,19 @@ export async function connectBusinessWhatsApp(businessId: string): Promise<void>
   const existing = sessions.get(businessId);
   if (existing && existing.status !== "disconnected") {
     return;
+  }
+
+  if (!(await isWhatsAppEnabled(businessId))) {
+    sessions.delete(businessId);
+    await WhatsAppSession.findOneAndUpdate(
+      { businessId },
+      { $set: { status: "disconnected" }, $unset: { authData: "", phoneNumber: "" } },
+      { upsert: true }
+    );
+    throw new AppError(
+      "Tu plan actual no incluye la integración de WhatsApp. Actualiza tu plan para activarla.",
+      402
+    );
   }
 
   const { state, saveCreds } = await useMongoAuthState(businessId);
@@ -131,6 +146,10 @@ function toWhatsAppJid(rawPhone: string): string {
 export async function sendWhatsAppMessage(businessId: string, phone: string, text: string): Promise<boolean> {
   const entry = sessions.get(businessId);
   if (!entry || entry.status !== "connected") return false;
+
+  // Cubre el caso de downgrade de plan con una sesión que ya estaba conectada: deja de
+  // enviarse aunque la conexión siga viva, sin necesidad de desconectar el socket.
+  if (!(await isWhatsAppEnabled(businessId))) return false;
 
   try {
     await entry.socket.sendMessage(toWhatsAppJid(phone), { text });
