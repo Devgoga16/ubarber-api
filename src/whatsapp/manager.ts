@@ -72,8 +72,21 @@ export async function connectBusinessWhatsApp(businessId: string): Promise<void>
       const text =
         msg.message.conversation ?? msg.message.extendedTextMessage?.text ?? undefined;
       if (!text) continue;
-      const senderJid = msg.key.remoteJid;
+      // WhatsApp puede entregar el chat 1:1 identificado por "@lid" (identidad oculta) en vez
+      // del número real "@s.whatsapp.net". Baileys expone el número real en senderPn/participantPn
+      // cuando eso pasa; si no lo usamos, el matching por teléfono del barbero nunca encuentra nada.
+      const senderJid =
+        (msg.key.remoteJid?.endsWith("@lid") && (msg.key.senderPn || msg.key.participantPn)) ||
+        msg.key.remoteJid;
       if (!senderJid) continue;
+      console.log("[whatsapp] mensaje entrante", {
+        businessId,
+        text,
+        remoteJid: msg.key.remoteJid,
+        senderPn: msg.key.senderPn,
+        participantPn: msg.key.participantPn,
+        resolvedSenderJid: senderJid,
+      });
       handleIncomingReply(businessId, senderJid, text).catch(() => {});
     }
   });
@@ -168,7 +181,10 @@ function jidToDigits(jid: string): string {
  */
 async function handleIncomingReply(businessId: string, senderJid: string, text: string): Promise<void> {
   const match = text.trim().match(/^(si|sí|no)(?:\s+([a-f0-9]{4,8}))?$/i);
-  if (!match) return;
+  if (!match) {
+    console.log("[whatsapp] mensaje ignorado: no matchea 'SI'/'NO'", { senderJid, text });
+    return;
+  }
 
   const decision = match[1].toLowerCase().startsWith("s") ? "confirm" : "reject";
   const code = match[2]?.toLowerCase();
@@ -181,6 +197,13 @@ async function handleIncomingReply(businessId: string, senderJid: string, text: 
   const fromThisBarber = candidates.filter((a) => {
     const barber = a.barberId as unknown as { phone?: string };
     return barber?.phone && jidToDigits(barber.phone) === senderDigits;
+  });
+
+  console.log("[whatsapp] resolviendo respuesta de barbero", {
+    senderDigits,
+    candidatosTotales: candidates.length,
+    candidatosDeEsteBarbero: fromThisBarber.length,
+    telefonosBarberosCandidatos: candidates.map((a) => (a.barberId as unknown as { phone?: string })?.phone),
   });
 
   let target = code
