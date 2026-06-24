@@ -5,6 +5,7 @@ import { Subscription } from "../../models/Subscription";
 import { Plan } from "../../models/Plan";
 import { SUBSCRIPTION_STATUSES } from "../../types/roles";
 import { AppError } from "../../utils/AppError";
+import { addPeriod, issueInvoiceForCurrentCycle } from "../../services/billing";
 
 const changePlanSchema = z.object({ planId: z.string().min(1) });
 const setStatusSchema = z.object({ status: z.enum(SUBSCRIPTION_STATUSES) });
@@ -21,16 +22,6 @@ async function findSubscriptionByBusiness(businessId: string) {
     throw new AppError("Suscripción no encontrada para este negocio", 404);
   }
   return subscription;
-}
-
-function addPeriod(start: Date, billingPeriod: "monthly" | "yearly"): Date {
-  const end = new Date(start);
-  if (billingPeriod === "monthly") {
-    end.setMonth(end.getMonth() + 1);
-  } else {
-    end.setFullYear(end.getFullYear() + 1);
-  }
-  return end;
 }
 
 export async function changePlan(req: Request, res: Response): Promise<void> {
@@ -73,8 +64,11 @@ export async function registerPayment(req: Request, res: Response): Promise<void
     const base = subscription.currentPeriodEnd > new Date() ? subscription.currentPeriodEnd : new Date();
     subscription.currentPeriodEnd = addPeriod(base, plan.billingPeriod);
     subscription.status = "active";
+    await subscription.save();
+    await issueInvoiceForCurrentCycle(subscription, plan);
+  } else {
+    await subscription.save();
   }
 
-  await subscription.save();
   res.json(subscription);
 }

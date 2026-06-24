@@ -7,6 +7,8 @@ import { Plan } from "../../models/Plan";
 import { Subscription } from "../../models/Subscription";
 import { AppError } from "../../utils/AppError";
 import { ensureBusinessSlug } from "../../services/businessSlug";
+import { addPeriod, issueInvoiceForCurrentCycle } from "../../services/billing";
+import { deleteBusinessCascade } from "../../services/businessDeletion";
 
 const createBusinessSchema = z.object({
   businessName: z.string().min(2),
@@ -16,16 +18,6 @@ const createBusinessSchema = z.object({
   ownerPassword: z.string().min(6),
   planId: z.string().min(1),
 });
-
-function addPeriod(start: Date, billingPeriod: "monthly" | "yearly"): Date {
-  const end = new Date(start);
-  if (billingPeriod === "monthly") {
-    end.setMonth(end.getMonth() + 1);
-  } else {
-    end.setFullYear(end.getFullYear() + 1);
-  }
-  return end;
-}
 
 export async function createBusiness(req: Request, res: Response): Promise<void> {
   const data = createBusinessSchema.parse(req.body);
@@ -68,6 +60,8 @@ export async function createBusiness(req: Request, res: Response): Promise<void>
     payments: [],
   });
 
+  await issueInvoiceForCurrentCycle(subscription, plan);
+
   res.status(201).json({ business, owner: { id: owner._id, email: owner.email }, subscription });
 }
 
@@ -96,4 +90,14 @@ export async function getBusiness(req: Request, res: Response): Promise<void> {
   }
   const subscription = await Subscription.findOne({ businessId: business._id }).populate("planId");
   res.json({ ...business, subscription });
+}
+
+export async function deleteBusiness(req: Request, res: Response): Promise<void> {
+  const business = await Business.findById(req.params.id);
+  if (!business) {
+    throw new AppError("Negocio no encontrado", 404);
+  }
+
+  await deleteBusinessCascade(business._id.toString());
+  res.status(204).send();
 }
