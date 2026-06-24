@@ -1,5 +1,12 @@
 import "dotenv/config";
 
+// Toda la app asume horarios de turno y horas de citas en hora de Perú (los números de
+// WhatsApp también se asumen +51). Si el host/contenedor corre en otra zona (p.ej. UTC en
+// Docker), Date.getHours()/getDay() devolverían una hora y hasta un día distinto al que
+// el cliente envió, rompiendo la validación de turno del barbero. Fijamos la TZ del proceso
+// para que sea consistente sin importar dónde se despliegue.
+process.env.TZ = process.env.TZ ?? "America/Lima";
+
 function required(name: string): string {
   const value = process.env[name];
   if (!value) {
