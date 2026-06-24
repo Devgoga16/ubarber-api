@@ -19,7 +19,8 @@ export function createApp() {
       credentials: true,
     })
   );
-  app.use(express.json());
+  // Las fotos (recibo de depósito, comprobante, etc) llegan como base64 en el body JSON.
+  app.use(express.json({ limit: "10mb" }));
   app.use(cookieParser());
   if (env.nodeEnv !== "test") {
     app.use(morgan("dev"));
