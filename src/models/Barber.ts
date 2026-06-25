@@ -13,6 +13,7 @@ export interface BarberDocument {
   userId: Types.ObjectId; // referencia al User con role "barber"
   locationIds: Types.ObjectId[];
   phone?: string;
+  photo?: string;
   specialties: string[];
   commissionPercentage?: number;
   shifts: BarberShift[];
@@ -38,6 +39,7 @@ const barberSchema = new Schema<BarberDocument>(
     userId: { type: Schema.Types.ObjectId, ref: "User", required: true, unique: true },
     locationIds: [{ type: Schema.Types.ObjectId, ref: "Location", required: true }],
     phone: { type: String, trim: true },
+    photo: { type: String },
     specialties: { type: [String], default: [] },
     commissionPercentage: { type: Number, min: 0, max: 100 },
     shifts: { type: [barberShiftSchema], default: [] },

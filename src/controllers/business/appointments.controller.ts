@@ -1,13 +1,16 @@
 import type { Request, Response } from "express";
+import { randomBytes } from "crypto";
 import { z } from "zod";
 import { Appointment } from "../../models/Appointment";
 import { Service } from "../../models/Service";
 import { Barber } from "../../models/Barber";
+import { Business } from "../../models/Business";
 import { APPOINTMENT_STATUSES } from "../../types/roles";
 import { AppError } from "../../utils/AppError";
 import { assertWithinBarberShift } from "../../services/shiftAvailability";
 import { sendWhatsAppMessage } from "../../whatsapp/manager";
-import { buildPaymentSummaryMessage } from "../../whatsapp/messages";
+import { buildPaymentSummaryMessage, buildReviewRequestMessage } from "../../whatsapp/messages";
+import { env } from "../../config/env";
 
 const createAppointmentSchema = z.object({
   locationId: z.string(),
@@ -145,10 +148,39 @@ export async function updateAppointmentStatus(req: Request, res: Response): Prom
     );
   }
 
-  const appointment = await Appointment.findOneAndUpdate(filter, { status }, { new: true });
+  // Al finalizar el servicio, se genera un enlace de calificación de un solo uso para el cliente.
+  const reviewToken =
+    status === "completed" && !current.reviewToken ? randomBytes(20).toString("hex") : undefined;
+
+  const appointment = await Appointment.findOneAndUpdate(
+    filter,
+    { status, ...(reviewToken ? { reviewToken } : {}) },
+    { new: true }
+  )
+    .populate("clientId", "name phone")
+    .populate({ path: "barberId", populate: { path: "userId", select: "name" } });
   if (!appointment) {
     throw new AppError("Cita no encontrada", 404);
   }
+
+  if (reviewToken) {
+    const client = appointment.clientId as unknown as { name: string; phone: string };
+    const barber = appointment.barberId as unknown as { userId?: { name: string } };
+    if (client?.phone) {
+      const business = await Business.findById(req.auth!.businessId).select("name");
+      sendWhatsAppMessage(
+        req.auth!.businessId!,
+        client.phone,
+        buildReviewRequestMessage({
+          clientName: client.name,
+          businessName: business?.name ?? "el negocio",
+          barberName: barber?.userId?.name ?? "tu barbero",
+          reviewUrl: `${env.publicWebUrl}/calificar/${reviewToken}`,
+        })
+      ).catch(() => {});
+    }
+  }
+
   res.json(appointment);
 }
 

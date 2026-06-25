@@ -1,9 +1,11 @@
 import type { Request, Response } from "express";
 import bcrypt from "bcryptjs";
+import { Types } from "mongoose";
 import { z } from "zod";
 import { User } from "../../models/User";
 import { Barber } from "../../models/Barber";
 import { Service } from "../../models/Service";
+import { Review } from "../../models/Review";
 import { assertCanCreateBarber } from "../../services/planLimits";
 import { AppError } from "../../utils/AppError";
 
@@ -27,17 +29,33 @@ const createBarberSchema = z.object({
 
 const updateBarberSchema = z.object({
   phone: z.string().optional(),
+  photo: z.string().optional(),
   locationIds: z.array(z.string()).min(1).optional(),
   specialties: z.array(z.string()).optional(),
   commissionPercentage: z.number().min(0).max(100).optional(),
   shifts: z.array(shiftSchema).optional(),
 });
 
+async function withRatings<T extends { _id: Types.ObjectId }>(barbers: T[]) {
+  const barberIds = barbers.map((b) => b._id);
+  const ratings = await Review.aggregate([
+    { $match: { barberId: { $in: barberIds } } },
+    { $group: { _id: "$barberId", average: { $avg: "$rating" }, count: { $sum: 1 } } },
+  ]);
+  const ratingMap = new Map(ratings.map((r) => [r._id.toString(), { average: r.average, count: r.count }]));
+  return barbers.map((b) => ({
+    ...b,
+    ratingAverage: ratingMap.get(b._id.toString())?.average ?? null,
+    ratingCount: ratingMap.get(b._id.toString())?.count ?? 0,
+  }));
+}
+
 export async function listBarbers(req: Request, res: Response): Promise<void> {
   const barbers = await Barber.find({ businessId: req.auth!.businessId })
     .populate("userId", "name email isActive")
     .sort({ createdAt: 1 });
-  res.json(barbers);
+  const withRatingsList = await withRatings(barbers.map((b) => b.toObject()));
+  res.json(withRatingsList);
 }
 
 export async function createBarber(req: Request, res: Response): Promise<void> {
@@ -97,7 +115,8 @@ export async function getMyBarberProfile(req: Request, res: Response): Promise<v
   if (!barber) {
     throw new AppError("No tienes un perfil de barbero asociado", 404);
   }
-  res.json(barber);
+  const [withRatingsList] = await withRatings([barber.toObject()]);
+  res.json(withRatingsList);
 }
 
 const updateMyShiftsSchema = z.object({ shifts: z.array(shiftSchema) });

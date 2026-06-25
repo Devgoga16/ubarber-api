@@ -10,6 +10,7 @@ import { Barber } from "../../models/Barber";
 import { Client } from "../../models/Client";
 import { Appointment } from "../../models/Appointment";
 import { PaymentMethod } from "../../models/PaymentMethod";
+import { Review } from "../../models/Review";
 import { getAvailableSlots, assertWithinBarberShift } from "../../services/shiftAvailability";
 import { computeDepositCents } from "../../services/deposit";
 import { AppError } from "../../utils/AppError";
@@ -40,10 +41,32 @@ export async function getPublicBusinessInfo(req: Request, res: Response): Promis
       "name durationMinutes priceCents photo locationIds depositType depositValueCents depositValuePercent"
     ),
     Barber.find({ businessId: business._id, isActive: true })
-      .select("locationIds favoriteServiceIds")
+      .select("locationIds favoriteServiceIds photo")
       .populate("userId", "name"),
     PaymentMethod.find({ businessId: business._id, isActive: true }).select("name"),
   ]);
+
+  const barberIds = barbers.map((b) => b._id);
+  const ratingsByBarber = await Review.aggregate([
+    { $match: { barberId: { $in: barberIds } } },
+    { $group: { _id: "$barberId", average: { $avg: "$rating" }, count: { $sum: 1 } } },
+  ]);
+  const ratingMap = new Map(
+    ratingsByBarber.map((r) => [r._id.toString(), { average: r.average, count: r.count }])
+  );
+
+  const reviewsByBarber = await Review.find({ barberId: { $in: barberIds } })
+    .select("barberId rating comment clientName createdAt")
+    .sort({ createdAt: -1 });
+  const reviewsMap = new Map<string, { rating: number; comment?: string; clientName: string }[]>();
+  for (const review of reviewsByBarber) {
+    const key = review.barberId.toString();
+    const list = reviewsMap.get(key) ?? [];
+    if (list.length < 5) {
+      list.push({ rating: review.rating, comment: review.comment, clientName: review.clientName });
+    }
+    reviewsMap.set(key, list);
+  }
 
   res.json({
     business: { name: business.name },
@@ -60,11 +83,16 @@ export async function getPublicBusinessInfo(req: Request, res: Response): Promis
     paymentMethods,
     barbers: barbers.map((b) => {
       const user = b.userId as unknown as { name: string } | null;
+      const rating = ratingMap.get(b._id.toString());
       return {
         _id: b._id,
         name: user && typeof user === "object" ? user.name : "Barbero",
         locationIds: b.locationIds,
         favoriteServiceIds: b.favoriteServiceIds,
+        photo: b.photo,
+        ratingAverage: rating?.average ?? null,
+        ratingCount: rating?.count ?? 0,
+        recentReviews: reviewsMap.get(b._id.toString()) ?? [],
       };
     }),
   });

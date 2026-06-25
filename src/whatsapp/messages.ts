@@ -106,6 +106,19 @@ export function buildAppointmentRejectedMessage(params: {
   );
 }
 
+export function buildReviewRequestMessage(params: {
+  clientName: string;
+  businessName: string;
+  barberName: string;
+  reviewUrl: string;
+}): string {
+  return (
+    `Hola ${params.clientName} 👋, gracias por visitar *${params.businessName}*.\n\n` +
+    `¿Cómo te fue con ${params.barberName}? Cuéntanos calificando tu atención:\n${params.reviewUrl}\n\n` +
+    `Este enlace es personal y solo se puede usar una vez 🙏`
+  );
+}
+
 export function buildPaymentSummaryMessage(params: {
   clientName: string;
   businessName: string;

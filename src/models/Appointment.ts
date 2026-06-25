@@ -39,6 +39,8 @@ export interface AppointmentDocument {
   depositConfirmedAt?: Date;
   rejectionReason?: string;
   confirmationToken?: string;
+  reviewToken?: string;
+  reviewSubmittedAt?: Date;
   createdAt: Date;
   updatedAt: Date;
 }
@@ -72,6 +74,8 @@ const appointmentSchema = new Schema<AppointmentDocument>(
     depositConfirmedAt: { type: Date },
     rejectionReason: { type: String, trim: true },
     confirmationToken: { type: String, index: true, sparse: true },
+    reviewToken: { type: String, index: true, sparse: true },
+    reviewSubmittedAt: { type: Date },
   },
   { timestamps: true }
 );
